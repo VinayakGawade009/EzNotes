@@ -64,6 +64,7 @@ function AIChatBox({ open, onClose }: AIChatBoxProps) {
       },
     }),
     messages: initialMessages,
+    // maxSteps: 3,
   });
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
