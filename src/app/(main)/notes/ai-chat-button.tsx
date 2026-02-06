@@ -8,7 +8,7 @@ import { useAuthToken } from "@convex-dev/auth/react";
 import { Bot, Expand, Minimize, Send, Trash, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { useChat } from "@ai-sdk/react";
-import { DefaultChatTransport, UIMessage } from "ai";
+import { DefaultChatTransport, stepCountIs, UIMessage } from "ai";
 
 const convexSiteUrl =
   process.env.NEXT_PUBLIC_CONVEX_URL?.replace(
@@ -19,7 +19,7 @@ const convexSiteUrl =
 export function AIChatButton() {
   const [chatOpen, setChatOpen] = useState(false);
 
-  console.log(convexSiteUrl);
+  // console.log(convexSiteUrl);
   return (
     <>
       <Button onClick={() => setChatOpen(true)} variant="outline">
@@ -65,6 +65,7 @@ function AIChatBox({ open, onClose }: AIChatBoxProps) {
     }),
     messages: initialMessages,
     // maxSteps: 3,
+    // stopWhen: stepCountIs(5),
   });
 
   const messagesEndRef = useRef<HTMLDivElement>(null);

@@ -2,9 +2,9 @@ import { httpRouter } from "convex/server";
 import { auth } from "./auth";
 import { httpAction } from "./_generated/server";
 import { getAuthUserId } from "@convex-dev/auth/server";
-import { convertToModelMessages, streamText, tool, UIMessage } from "ai";
+import { convertToModelMessages, stepCountIs, streamText, tool } from "ai";
 import { google } from "@ai-sdk/google";
-import { z } from "zod/v4";
+import { z } from "zod";
 import { internal } from "./_generated/api";
 
 const http = httpRouter();
@@ -12,26 +12,23 @@ const http = httpRouter();
 auth.addHttpRoutes(http);
 
 http.route({
-    path: "/api/chat",
-    method: "POST",
-    handler: httpAction(async (ctx, req) => {
-        const userId = await getAuthUserId(ctx);
-        if (!userId) {
-            return Response.json({erro: "Unauthorized"}, {status: 401})
-        }
+  path: "/api/chat",
+  method: "POST",
+  handler: httpAction(async (ctx, req) => {
+    const userId = await getAuthUserId(ctx);
+    if (!userId) {
+      return Response.json({ erro: "Unauthorized" }, { status: 401 })
+    }
 
-        const { messages } : {messages: UIMessage[]} = await req.json();
+    const { messages } = await req.json();
 
-        const lastMessages = messages.slice(-10); // 10 latest messages
-        
-        const coreMessages = lastMessages.map((m: any) => ({
-            role: m.role,
-            content: m.content,
-        }));
+    const lastMessages = messages.slice(-10); // 10 latest messages
 
-        const result = streamText({
-            model: google("gemini-2.5-flash"),
-            system: `
+    const last10ModelMsgs = await convertToModelMessages(lastMessages);
+
+    const result = streamText({
+      model: google("gemini-3-flash-preview"),
+      system: `
               You are a helpful assistant that can search through the user's notes.
               Use the information from the notes to answer questions and provide insights.
               If the requested information is not available, respond with "Sorry, I can't find that information in your notes".
@@ -39,46 +36,46 @@ http.route({
               Provide links to relevant notes using this relative URL structure (omit the base URL): '/notes?noteId=<note-id>'.
               Keep your responses concise and to the point.
             `,
-            messages: convertToModelMessages(lastMessages),
-            // messages: coreMessages,
-            tools: {
-              findRelevantNotes: tool({
-                description: "Retrieve relevant notes from the database based on the user's query",
-                parameters: z.object({
-                  query: z.string().describe("The user's query"),
-                }),
-                execute: async ({query}) => {
-                  console.log("findRelevantNotes query: ", query);
+      messages: last10ModelMsgs,
+      tools: {
+        findRelevantNotes: tool({
+          description: "Retrieve relevant notes from the database based on the user's query",
+          inputSchema: z.object({
+            query: z.string().describe("The user's query"),
+          }),
+          execute: async ({ query }) => {
+            console.log("findRelevantNotes query: ", query);
 
-                  const relevantNotes = await ctx.runAction(
-                    internal.notesActions.findRelevantNotes,
-                    {
-                      query,
-                      userId
-                    }
-                  )
+            const relevantNotes = await ctx.runAction(
+              internal.notesActions.findRelevantNotes,
+              {
+                query,
+                userId
+              }
+            );
 
-                  return relevantNotes.map(note => ({
-                    id: note._id,
-                    title: note.title,
-                    body: note.body,
-                    creationTime: note._creationTime
-                  }))
-                }
-              })
-            },
-            onError(error) {
-                console.error("streamText error: ", error);
-            },
-        });
+            return relevantNotes.map(note => ({
+              id: note._id,
+              title: note.title,
+              body: note.body,
+              creationTime: note._creationTime
+            }));
+          }
+        })
+      },
+      stopWhen: stepCountIs(3),
+      onError(error) {
+        console.error("streamText error: ", error);
+      },
+    });
 
-        return result.toUIMessageStreamResponse({
-            headers: new Headers({
-                "Access-Control-Allow-Origin": "*",
-                Vary: "origin",
-            })
-        });
-    }),
+    return result.toUIMessageStreamResponse({
+      headers: new Headers({
+        "Access-Control-Allow-Origin": "*",
+        Vary: "origin",
+      })
+    });
+  }),
 });
 
 http.route({
