@@ -117,3 +117,55 @@ export const fetchNotesByEmbeddingids = internalQuery({
         return results;
     },
 });
+
+// Edit notes
+export const updateNoteWithEmbeddings = internalMutation({
+  args: {
+    noteId: v.id("notes"),
+    title: v.string(),
+    body: v.string(),
+    embeddings: v.array(
+      v.object({
+        embedding: v.array(v.float64()),
+        content: v.string(),
+      })
+    ),
+  },
+  handler: async (ctx, args) => {
+    const userId = await getAuthUserId(ctx);
+    if (!userId) {
+      throw new Error("Unauthorized");
+    }
+
+    const note = await ctx.db.get(args.noteId);
+    if (!note || note.userId !== userId) {
+      throw new Error("Note not found or unauthorized");
+    }
+
+    // 1. Update the note text
+    await ctx.db.patch(args.noteId, {
+      title: args.title,
+      body: args.body,
+    });
+
+    // 2. Delete old embeddings (because text changed)
+    const existingEmbeddings = await ctx.db
+      .query("noteEmbeddings")
+      .withIndex("by_noteId", (q) => q.eq("noteId", args.noteId))
+      .collect();
+
+    for (const embedding of existingEmbeddings) {
+      await ctx.db.delete(embedding._id);
+    }
+
+    // 3. Create new embeddings
+    for (const embeddingData of args.embeddings) {
+      await ctx.db.insert("noteEmbeddings", {
+        content: embeddingData.content,
+        embedding: embeddingData.embedding,
+        noteId: args.noteId,
+        userId: userId,
+      });
+    }
+  },
+});
