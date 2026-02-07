@@ -8,7 +8,7 @@ import { useAuthToken } from "@convex-dev/auth/react";
 import { Bot, Expand, Minimize, Send, Trash, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { useChat } from "@ai-sdk/react";
-import { DefaultChatTransport, stepCountIs, UIMessage } from "ai";
+import { DefaultChatTransport, UIMessage } from "ai";
 
 const convexSiteUrl =
   process.env.NEXT_PUBLIC_CONVEX_URL?.replace(
